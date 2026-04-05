@@ -10,16 +10,14 @@ def safe_calc(val):
 def calculate_sar(H, f, Ms, magnetic_moment, concentration, AV, regime):
     try:
         if "SPM" in regime:
-            # High-Accuracy SPM Formula (R2 = 0.801)
-            # Based on Symbolic Regression Analysis
+            # High-Accuracy SPM Formula (R2 = 0.801) [cite: 2, 3]
             term1 = np.log(magnetic_moment)
             term2 = np.sqrt(H * f + concentration)
             term3 = (np.log(magnetic_moment) * (f**2) * H) / (concentration / (Ms + 1e-9))
             res = term1 * (term2 + term3)
             return np.maximum(res, 0.1)
         else:
-            # SM Formula (R2 = 0.682)
-            # Energy loss based on hysteresis behavior
+            # SM Formula (R2 = 0.682) [cite: 5]
             res = (1/Ms - np.sqrt(Ms))/AV + (20 - Ms)/(f + 1e-9) + H*(f+1)
             return np.maximum(res, 0.1)
     except: 
@@ -34,7 +32,9 @@ def analyze_image(uploaded_file, scale_pixel_to_nm):
     # Pre-processing for particle detection
     blur = cv2.GaussianBlur(gray, (5,5), 0)
     _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    contours, _ = cv2.find_contours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # KESİN DÜZELTME: find_contours yerine findContours kullanıldı
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     sizes = []
     for cnt in contours:
@@ -44,7 +44,7 @@ def analyze_image(uploaded_file, scale_pixel_to_nm):
             sizes.append(equivalent_diameter)
     
     if not sizes:
-        return 15.0, 0 # Default diameter if none detected
+        return 15.0, 0 
         
     avg_diameter_px = np.mean(sizes)
     avg_diameter_nm = avg_diameter_px * scale_pixel_to_nm
@@ -63,18 +63,17 @@ with col1:
     st.header("📸 Step 1: Automated Image Analysis")
     up_file = st.file_uploader("Upload SEM/TEM Micrograph", type=['png', 'jpg', 'jpeg'])
     
-    # Scale adjustment for accurate nanometer calculation
     nm_per_pixel = st.number_input("Calibration: Nanometers per Pixel (nm/px)", value=0.5, step=0.1)
     
     if up_file:
         diam, count = analyze_image(up_file, nm_per_pixel)
         st.success(f"Detection Successful: {count} particles identified.")
         st.info(f"Calculated Mean Diameter: {diam:.2f} nm")
-        # A/V Ratio Calculation (Surface Area to Volume)
+        # Surface-to-Volume Ratio [cite: 17]
         auto_av = 6 / (diam + 1e-9) 
         st.write(f"Resulting Area/Volume Ratio: **{auto_av:.4f}**")
     else:
-        auto_av = 0.08 # Default fallback value
+        auto_av = 0.08 
 
     st.divider()
     
@@ -91,10 +90,8 @@ with col2:
     if st.button("RUN COMPLETE AI ANALYSIS", use_container_width=True):
         final_sar = calculate_sar(H, f, Ms, magnetic_moment, concentration, auto_av, regime)
         
-        # Display Metric
         st.metric(label="Predicted SAR Value", value=f"{final_sar:.2f} W/g")
         
-        # Visualization
         st.subheader("Field Amplitude vs SAR Response")
         h_range = np.linspace(10, 1000, 50)
         y_vals = [calculate_sar(h, f, Ms, magnetic_moment, concentration, auto_av, regime) for h in h_range]
